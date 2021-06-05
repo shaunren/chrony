@@ -42,6 +42,7 @@
 #define OP_BINDSOCKET     1027
 #define OP_NAME2IPADDRESS 1028
 #define OP_RELOADDNS      1029
+#define OP_ADJUSTFREQ     1030
 #define OP_QUIT           1099
 
 union sockaddr_in46 {
@@ -78,6 +79,12 @@ typedef struct {
   char name[256];
 } ReqName2IPAddress;
 
+#ifdef PRIVOPS_ADJUSTFREQ
+typedef struct {
+  int64_t freq;
+} ReqAdjustFreq;
+#endif
+
 typedef struct {
   int op;
   union {
@@ -89,6 +96,9 @@ typedef struct {
     ReqBindSocket bind_socket;
 #ifdef PRIVOPS_NAME2IPADDRESS
     ReqName2IPAddress name_to_ipaddress;
+#endif
+#ifdef PRIVOPS_ADJUSTFREQ
+    ReqAdjustFreq adjust_freq;
 #endif
   } data;
 } PrvRequest;
@@ -110,6 +120,10 @@ typedef struct {
 } ResName2IPAddress;
 
 typedef struct {
+  int64_t oldfreq;
+} ResAdjustFreq;
+
+typedef struct {
   char msg[256];
 } ResFatalMsg;
 
@@ -125,6 +139,9 @@ typedef struct {
 #endif
 #ifdef PRIVOPS_NAME2IPADDRESS
     ResName2IPAddress name_to_ipaddress;
+#endif
+#ifdef PRIVOPS_ADJUSTFREQ
+    ResAdjustFreq adjust_freq;
 #endif
   } data;
 } PrvResponse;
@@ -299,6 +316,21 @@ do_reload_dns(PrvResponse *res)
 }
 #endif
 
+
+/* ======================================================================= */
+
+/* HELPER - perform adjustfreq() */
+
+#ifdef PRIVOPS_ADJUSTFREQ
+static void
+do_adjust_freq(const ReqAdjustFreq *req, PrvResponse *res)
+{
+  res->rc = adjfreq(&req->freq, &res->data.adjust_freq.oldfreq);
+  if (res->rc)
+    res->res_errno = errno;
+}
+#endif
+
 /* ======================================================================= */
 
 /* HELPER - main loop - action requests from the daemon */
@@ -346,6 +378,11 @@ helper_main(int fd)
 #ifdef PRIVOPS_RELOADDNS
       case OP_RELOADDNS:
         do_reload_dns(&res);
+        break;
+#endif
+#ifdef PRIVOPS_ADJUSTFREQ
+      case OP_ADJUSTFREQ:
+        do_adjust_freq(&req.data.adjust_freq, &res);
         break;
 #endif
       case OP_QUIT:
@@ -623,6 +660,34 @@ PRV_ReloadDNS(void)
 
 /* ======================================================================= */
 
+/* DAEMON - request adjfreq() */
+
+#ifdef PRIVOPS_ADJUSTFREQ
+int
+PRV_AdjustFreq(const int64_t *freq, int64_t *oldfreq)
+{
+  PrvRequest req;
+  PrvResponse res;
+
+  if (!have_helper() || freq == NULL)
+    /* helper is not running or read adjustment call */
+    return adjfreq(freq, oldfreq);
+
+  memset(&req, 0, sizeof (req));
+  req.op = OP_ADJUSTFREQ;
+  req.data.adjust_freq.freq = *freq;
+
+  submit_request(&req, &res);
+
+  if (oldfreq)
+    *oldfreq = res.data.adjust_freq.oldfreq;
+
+  return res.rc;
+}
+#endif
+
+/* ======================================================================= */
+
 void
 PRV_Initialise(void)
 {
@@ -666,6 +731,12 @@ PRV_StartHelper(void)
 
     /* ignore signals, the process will exit on OP_QUIT request */
     UTI_SetQuitSignalsHandler(SIG_IGN, 1);
+
+
+#ifdef OPENBSD
+    if (pledge("stdio unix settime", NULL) == -1)
+      LOG_FATAL("pledge() failed");
+#endif
 
     helper_main(sock_fd2);
 

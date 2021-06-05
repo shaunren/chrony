@@ -62,6 +62,10 @@
 #include <sys/timex.h>
 #endif
 
+#if defined(OPENBSD)
+#include <sys/sysctl.h>
+#endif
+
 #ifdef HAVE_GETRANDOM
 #include <sys/random.h>
 #endif

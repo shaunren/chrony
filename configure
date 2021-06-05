@@ -446,6 +446,18 @@ case $OPERATINGSYSTEM in
         add_def NETBSD
         echo "Configuring for $SYSTEM"
     ;;
+    OpenBSD)
+        try_recvmmsg=0
+        EXTRA_OBJECTS="sys_generic.o sys_openbsd.o sys_posix.o"
+        try_setched=1
+        try_lockmem=1
+        add_def OPENBSD
+        if [ $feat_droproot = "1" ]; then
+          add_def FEAT_PRIVDROP
+          priv_ops="ADJUSTTIME ADJUSTFREQ SETTIME"
+        fi
+        echo "Configuring for $SYSTEM"
+    ;;
     Darwin)
         EXTRA_OBJECTS="sys_macosx.o"
         LIBS="$LIBS -lresolv"
