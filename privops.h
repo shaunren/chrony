@@ -64,6 +64,12 @@ void PRV_ReloadDNS(void);
 #define PRV_ReloadDNS DNS_Reload
 #endif
 
+#ifdef PRIVOPS_ADJUSTFREQ
+int PRV_AdjustFreq(const int64_t *freq, int64_t *oldfreq);
+#else
+#define PRV_AdjustFreq adjfreq
+#endif
+
 #ifdef PRIVOPS_HELPER
 void PRV_Initialise(void);
 void PRV_StartHelper(void);
